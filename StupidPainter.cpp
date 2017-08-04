@@ -1,0 +1,487 @@
+/*-------------------------------------------------------------------
+  
+  Usage:   ./colorpp <NC>
+  
+  Syntax: 
+
+  [T(1)T(1)]=tr[T^a1_ij*T^a1_ij]
+  
+  f(1,2,3)f(1,2,3)=f^{abc}f^{abc}
+  
+  --------------------------------------------------------------------*/
+
+#include <regex>
+#include <iostream>
+#include <Eigen/Dense>
+#include <vector>
+#include <list>
+#include <stdexcept>
+#include <set>
+#include <map>
+#include <tuple>
+#include <iomanip>
+// GNU readline for prompt editing
+#include <readline/readline.h>
+#include <readline/history.h>
+
+using Eigen::MatrixXcd;
+
+
+std::list<size_t> int2base(size_t input, size_t base)
+{
+  std::list<size_t> result;
+  while(input) {
+    result.push_front(input%base);
+    input /= base;
+  }
+  return result;
+}
+
+std::list<size_t> fixLenSeq(size_t input, size_t base, size_t len)
+{
+  std::list<size_t> res(len,0);
+  
+  std::list<size_t> ib = int2base(input,base);
+
+  ib.insert (ib.begin(),len - ib.size(),0);   
+  return ib;
+}
+
+class Timer
+{
+  std::clock_t    start;
+public:
+  Timer():start(std::clock())
+  {
+  }
+   
+  double elapsed()
+  {
+    // std::cout << "Time: " << (std::clock() - start) / (double)(CLOCKS_PER_SEC / 1000) << " ms" << std::endl << std::endl;
+    return (std::clock() - start) / (double)(CLOCKS_PER_SEC / 1000);
+  }
+};
+
+typedef std::list<size_t> AdjVec;
+typedef std::vector<size_t> abc;
+
+typedef std::list<std::list<size_t> > TrVec;
+typedef std::list<abc> fVec;
+
+class Color
+{
+  const double TF = 0.5;
+  size_t nc;                    // Fundamental representation
+  size_t na;                    // Adjoint representation
+  
+  std::vector<MatrixXcd> vgelm; // Gell-Mann matrices
+
+  std::map<std::tuple<size_t,size_t,size_t>, double> fabcMap; // Map of sorted f^abc
+  
+  TrVec traces;
+  fVec structConsts;
+
+  size_t nIndex;
+
+  size_t seedCntr;
+  std::map<size_t,size_t> amap;
+public:
+  Color(size_t NC): nc(NC), na(NC*NC-1)
+  {
+    // Constructing basis of Generalized Gell-Mann matrices
+    std::cout << "Constructing T^a   >>> ";
+
+    int stepT = std::max(1, (int)ceil(na/10.));
+    size_t cntrT = 0;
+    Timer  timeT;
+
+    // Symmetric set 1
+    for (size_t k = 0; k < nc; k++)
+      for (size_t j = 0; j < k; j++)
+        {
+          MatrixXcd m = MatrixXcd::Constant(nc, nc, 0);
+          m(j,k) += 1;
+          m(k,j) += 1;
+          
+          vgelm.push_back(m);
+          cntrT++;
+          if((cntrT % stepT) == 0) std::cout <<" ." << std::flush;                    
+        }
+    
+    // Antisymmetric set 2
+    for (size_t j = 0; j < nc; j++)
+      for (size_t k = 0; k < j; k++)
+        {
+          MatrixXcd m = MatrixXcd::Constant(nc,nc,0);
+          m(j,k) -= std::complex<double>(0,1);
+          m(k,j) += std::complex<double>(0,1);
+          
+          vgelm.push_back(m);
+          cntrT++;
+          if((cntrT % stepT) == 0) std::cout <<" ." << std::flush;
+        }
+    
+    // Diagonal set 3
+    for (size_t l = 1; l < nc; l++)
+      {
+        MatrixXcd m = MatrixXcd::Constant(nc,nc,0);
+        double coef = sqrt(2./double(l)/double(l+1));
+        
+        for (size_t j = 1; j <= l; j++)
+          m(j-1,j-1) += coef;
+        
+        m(l,l) -= coef * l;
+	
+	vgelm.push_back(m);
+        cntrT++;
+        if((cntrT % stepT) == 0) std::cout <<" ." << std::flush;
+      }
+    std::cout << " done in " << std::setw(12) << timeT.elapsed() << " ms" << std::endl;
+    
+    // Structure constants initialization
+
+    std::cout << "Constructing f^abc >>> ";
+    size_t cntrf = 1;
+    Timer  timef;
+    double nfabc = na*(na - 1)*(na - 2)/6.;
+    int stepf = std::max(1, (int)floor(nfabc/10.));
+    
+    for (size_t c = 0; c < na; c++)
+      for (size_t b = 0; b < c; b++)
+        for (size_t a = 0; a < b; a++)
+          {
+            fabcMap[std::make_tuple(a,b,c)] = fCalc(a,b,c);
+
+            if((cntrf % stepf) == 0) std::cout <<" ." << std::flush;
+            cntrf++;
+          }
+    std::cout << " done in " << std::setw(12) << timef.elapsed() << " ms" << std::endl;
+  }
+
+
+  bool nextSeed()
+  {
+    if(seedCntr < pow(na,amap.size()) - 1)
+      {
+	seedCntr++;
+	
+	std::list<size_t> result = fixLenSeq(seedCntr,na,amap.size());
+
+	std::map<size_t,size_t>::iterator begin1 = amap.begin();
+	std::list<size_t>::iterator begin2 = result.begin();
+	std::map<size_t,size_t>::iterator end1 = amap.end();
+	std::list<size_t>::iterator end2 = result.end();
+	std::map<size_t,size_t>::iterator i1;
+	std::list<size_t>::iterator i2;
+	for (i1 = begin1, i2 = begin2; (i1 != end1) && (i2 != end2); ++i1, ++i2)
+	  amap[i1->first] = *i2; 
+
+	return true;
+      }
+    return false;
+  }
+
+  std::map<size_t,size_t> seed()
+  {
+    return amap;
+  }
+  
+  bool parse(std::string str)
+  {
+    // Erase white spaces and all possible delimiters from the input
+    str.erase(std::remove(str.begin(), str.end(), ' '), str.end());
+    str.erase(std::remove(str.begin(), str.end(), ';'), str.end());
+    str.erase(std::remove(str.begin(), str.end(), ':'), str.end());
+    str.erase(std::remove(str.begin(), str.end(), '*'), str.end());
+        
+    // We allow for input only
+    // "[","]"
+    // "(",")"
+    // "f","T"
+    // ","
+    // integer numbers
+    // spaces
+    std::regex instrRegex("[[:digit:]()\\[\\]Tf,]+");
+    if(!std::regex_match (str, instrRegex))
+        return false;
+
+    std::cout << std::endl;
+    std::cout << "input: " << std::setw(72) <<  str << std::endl;
+    
+    // Clear state
+    traces.clear();
+    structConsts.clear();
+    
+    // Find traces
+    std::size_t found_left = str.find_first_of("[");
+    std::size_t found_right = found_left;
+    
+    std::regex traceRegex("(?:T\\(\\d+\\)){2,}");
+    std::regex tRegex("T\\((\\d+)\\)");
+    
+    while (found_left!=std::string::npos)
+      {
+        found_right = str.find_first_of("]",found_left+1);
+        
+        if (found_right!=std::string::npos)
+          {
+            std::string traceStr = str.substr(found_left+1,found_right - found_left - 1);
+            
+            // Parse T^a_ij only if they combined in proper trace string
+            if(std::regex_match (traceStr,traceRegex))
+              {
+                
+                std::regex_token_iterator<std::string::iterator> rend;
+                std::regex_token_iterator<std::string::iterator> a ( traceStr.begin(), traceStr.end(), tRegex,1 );
+                AdjVec newTrace;
+                while (a!=rend)
+                  {
+                    std::istringstream buffer(*a++);
+                    size_t value;
+                    buffer >> value; 
+                    newTrace.push_back(value);
+                  }
+                
+                traces.push_back(newTrace);
+	      }
+            else
+              throw std::runtime_error("Could not parse trace");
+          }
+        else
+          throw std::runtime_error("Trace is not closed");
+        
+        found_left = found_right+1;
+        found_left = str.find_first_of("[",found_right+1);
+      }
+
+    
+    // Find f^{abc}
+    found_left = str.find_first_of("f");
+    found_right = found_left;
+    
+    std::regex traceFabc("\\((\\d+),(\\d+),(\\d+)\\)");
+    
+    while (found_left != std::string::npos)
+      {
+        found_right = str.find_first_of(")",found_left+1);
+        
+        if (found_right != std::string::npos)
+          {
+            std::string fStr = str.substr(found_left+1,found_right - found_left );
+            
+            // Parse f_a,b,c only if they combined in proper trace
+            // string
+            std::smatch sm;
+            if(std::regex_match (fStr,sm,traceFabc))
+              {
+		abc newFabc;
+                for (unsigned i=1; i<sm.size(); ++i)
+                  {
+                    std::istringstream buffer(sm[i]);
+		    size_t value;
+		    buffer >> value;
+                    newFabc.push_back(value);
+                  }
+		
+                structConsts.push_back(newFabc);
+              }
+            else
+              throw std::runtime_error("Could not parse f(a,b,c)");
+          }
+        else
+          throw std::runtime_error("f(a,b,c) is not closed");
+        
+        found_left = found_right+1;
+        found_left = str.find_first_of("f",found_right+1);
+      }
+
+    std::multiset<size_t> adjIndices;
+    // Add indices from traces
+    for(TrVec::const_iterator it = traces.begin(); it != traces.end(); ++it)
+        adjIndices.insert(it->begin(),it->end());
+
+    // Add indices from structure constsnts
+    for(fVec::const_iterator it = structConsts.begin(); it != structConsts.end(); ++it)
+      adjIndices.insert(it->begin(),it->end());
+
+    for(std::multiset<size_t>::const_iterator it = adjIndices.begin(); it != adjIndices.end(); ++it)
+      if(adjIndices.count(*it) != 2)
+        {
+          std::stringstream ss;
+          ss << "Index " << *it << " is not paired";
+          throw std::runtime_error(ss.str());
+        }
+      else
+	amap[*it] = 0;
+    // Map filled with zeros and
+    // initial value for counter set
+    seedCntr = 0;
+    
+    nIndex = adjIndices.size()/2;
+
+    std::cout << "[T^a...] traces:" << std::setw(9) << traces.size() << "  ";
+    std::cout << "f^abc constants:" << std::setw(10) << structConsts.size() << "  ";
+    std::cout << "gluon lines:"     << std::setw(13) << nIndex << std::endl;
+    
+    return true;
+  } // parse()
+
+
+  double contract()
+  {
+    std::complex<double> sumres(0,0);
+    
+    do
+      {
+
+	std::complex<double> term(1,0);
+
+	// First multiply by f_abc
+	for(fVec::const_iterator it = structConsts.begin(); it != structConsts.end(); ++it)
+	  term *= f(amap[it->at(0)], amap[it->at(1)], amap[it->at(2)]);
+
+
+	// Second multiply by traces
+	for(TrVec::const_iterator it = traces.begin(); it != traces.end(); ++it)
+          {
+
+
+            // if (trMap(*it) != std::complex<double>(0,0)) std::cout
+            std::complex<double> c(trMap(*it));
+            term *= c;
+
+            // TODO if zero stop loop
+            if(std::norm(c) == 0) break;
+          }
+	
+	sumres += term;
+      }
+    while(nextSeed());
+
+    if (sumres.imag() != 0)
+      throw std::runtime_error("Imaginary part in color trace");
+    else
+      return sumres.real();
+  }
+  
+  inline size_t NC()
+  {
+    return nc;
+  }
+  inline size_t NA()
+  {
+    return na;
+  }
+  
+  MatrixXcd t(size_t a)
+  {
+    if(a > na)
+      throw std::runtime_error("Adjoint index to big");
+    return vgelm[a]/2.;
+  }
+
+  double f(size_t a, size_t b, size_t c)
+  {
+    if((a == b) || (b == c) || (c == a))
+      return 0;
+
+    if((a < b) && (b < c))
+      return fabcMap[std::make_tuple(a,b,c)];
+    if((a < c) && (c < b))
+      return -fabcMap[std::make_tuple(a,c,b)];
+    if((b < a) && (a < c))
+      return -fabcMap[std::make_tuple(b,a,c)];
+    if((b < c) && (c < a))
+      return fabcMap[std::make_tuple(b,c,a)];
+    if((c < a) && (a < b))
+      return fabcMap[std::make_tuple(c,a,b)];
+    if((c < b) && (b < a))
+      return -fabcMap[std::make_tuple(c,b,a)];
+
+    throw std::runtime_error("Not found f^abc value");
+  }
+
+  double fCalc(size_t a, size_t b, size_t c)
+  {
+    return std::imag((t(a)*t(b)*t(c)).trace() - (t(b)*t(a)*t(c)).trace())/TF;
+  }
+
+  std::complex<double> tr(AdjVec av)
+  {
+    MatrixXcd m = MatrixXcd::Identity(nc, nc);
+    
+    for (AdjVec::iterator it = av.begin(); it != av.end(); ++it)
+      m *= t(*it);
+    return m.trace();
+  }
+
+  std::complex<double> trMap(AdjVec av)
+  {
+    AdjVec avMaped;
+    for (AdjVec::iterator it = av.begin(); it != av.end(); ++it)
+      avMaped.push_back(amap[*it]);
+
+    return tr(avMaped);
+  }
+};
+
+
+
+int main(int argc, char* argv[])
+{
+
+  if (argc != 2)
+    {
+      std::cout << "Number of colors as argument required!" << std::endl;
+      std::cout << std::endl;
+      std::cout << "Usage ./colorpp <Nc>" << std::endl;
+      std::cout << std::endl;
+      std::cout << "Syntax:" << std::endl; 
+      std::cout << std::endl;
+      std::cout << "  [T(1)T(1)]=tr[T^a1_ij*T^a1_ij]  - fundamental rep trace" << std::endl;
+      std::cout << "  f(1,2,3)f(1,2,3)=f^{abc}f^{abc} - adjoint rep matrices" <<std::endl;      
+      std::cout << std::endl;
+      
+      return 1;
+    }
+
+  std::cout << "Number of colors : " << argv[1] << std::endl;
+    
+  Color col(atoi(argv[1]));
+
+  char* input;
+  std::string* lineInput;
+  std::string shell_prompt("colorpp>");
+  for(;;)
+    {
+      input = readline(shell_prompt.c_str());
+      // Exit if received EOLN or readline return
+      // zero pointer
+      if (input == 0)
+        break;
+
+      lineInput = new std::string(input);
+
+
+      // Add non empty input to the history
+      if(!lineInput->empty())
+        add_history(input);
+     
+      if(col.parse(*lineInput))
+        {
+          Timer t1;
+          std::cout << std::setfill ('=') << std::setw (80) << "" << std::endl;
+          std::cout << std::setfill (' ');
+          std::cout << "result:" << std::setw(33) << col.contract()
+                    << "  Time:"  << std::setw(30) << t1.elapsed() << " ms"
+                    << std::endl;    
+        }
+      
+      delete(lineInput);
+      free(input);
+      
+    }
+
+  std::cout << "bye!" << std::endl;
+  return 0;
+}
