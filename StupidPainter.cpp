@@ -454,56 +454,70 @@ public:
 int main(int argc, char* argv[])
 {
 
-  if (argc != 2)
+  try
     {
-      std::cout << "Number of colors as argument required!" << std::endl;
-      std::cout << std::endl;
-      std::cout << "Usage ./StupidPainter <Nc>" << std::endl;
-      std::cout << std::endl;
-      std::cout << "Syntax:" << std::endl; 
-      std::cout << std::endl;
-      std::cout << "  [T(1)T(1)]=tr[T^a1_ij*T^a1_ij]  - fundamental rep trace" << std::endl;
-      std::cout << "  f(1,2,3)f(1,2,3)=f^{abc}f^{abc} - adjoint rep matrices" <<std::endl;      
-      std::cout << std::endl;
-      
-      return 1;
-    }
-
-  std::cout << "Number of colors : " << argv[1] << std::endl;
-    
-  Color col(atoi(argv[1]));
-
-  char* input;
-  std::string* lineInput;
-  std::string shell_prompt("StupidPainter>");
-  for(;;)
-    {
-      input = readline(shell_prompt.c_str());
-      // Exit if received EOLN or readline return
-      // zero pointer
-      if (input == 0)
-        break;
-
-      lineInput = new std::string(input);
-
-
-      // Add non empty input to the history
-      if(!lineInput->empty())
-        add_history(input);
-     
-      if(col.parse(*lineInput))
+      if (argc != 2)
         {
-          Timer t1;
-          std::cout << std::setfill ('=') << std::setw (80) << "" << std::endl;
-          std::cout << std::setfill (' ');
-          std::cout << "result:" << std::setw(33) << col.contract()
-                    << "  Time:"  << std::setw(30) << t1.elapsed() << " ms"
-                    << std::endl;    
+          std::cout << "Number of colors as argument required!" << std::endl;
+          std::cout << std::endl;
+          std::cout << "Usage ./StupidPainter <Nc>" << std::endl;
+          std::cout << std::endl;
+          std::cout << "Syntax:" << std::endl; 
+          std::cout << std::endl;
+          std::cout << "  [T(1)T(1)]=tr[T^a1_ij*T^a1_ij]  - fundamental rep trace" << std::endl;
+          std::cout << "  f(1,2,3)f(1,2,3)=f^{abc}f^{abc} - adjoint rep matrices" <<std::endl;      
+          std::cout << std::endl;
+          
+          return 1;
         }
       
-      delete(lineInput);
-      free(input);
+      std::cout << "Number of colors : " << argv[1] << std::endl;
       
+      int Nc(atoi(argv[1]));
+      
+      if(Nc <= 2)
+        throw std::logic_error("Allowed N>=2 only for SU(N)");
+      
+      Color col(Nc);
+      
+      char* input;
+      std::string* lineInput;
+      std::string shell_prompt("StupidPainter>");
+      for(;;)
+        {
+          input = readline(shell_prompt.c_str());
+          // Exit if received EOLN or readline return
+          // zero pointer
+          if (input == 0)
+            break;
+          
+          lineInput = new std::string(input);
+          
+          
+          // Add non empty input to the history
+          if(!lineInput->empty())
+            add_history(input);
+          
+          if(col.parse(*lineInput))
+            {
+              Timer t1;
+              std::cout << std::setfill ('=') << std::setw (80) << "" << std::endl;
+              std::cout << std::setfill (' ');
+              std::cout << "result:" << std::setw(33) << col.contract()
+                        << "  Time:"  << std::setw(30) << t1.elapsed() << " ms"
+                        << std::endl;    
+            }
+          
+          delete(lineInput);
+          free(input);
+          
+        }
+      
+    } 
+  catch (std::exception &p) 
+    {
+      std::cerr << p.what() << std::endl;
+      return 1;
     }
 
   std::cout << "bye!" << std::endl;
