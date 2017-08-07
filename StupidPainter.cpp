@@ -1,6 +1,6 @@
 /*-------------------------------------------------------------------
   
-  Usage:   ./colorpp <NC>
+  Usage:   ./StupidPainter <NC>
   
   Syntax: 
 
@@ -434,7 +434,7 @@ int main(int argc, char* argv[])
     {
       std::cout << "Number of colors as argument required!" << std::endl;
       std::cout << std::endl;
-      std::cout << "Usage ./colorpp <Nc>" << std::endl;
+      std::cout << "Usage ./StupidPainter <Nc>" << std::endl;
       std::cout << std::endl;
       std::cout << "Syntax:" << std::endl; 
       std::cout << std::endl;
@@ -451,7 +451,7 @@ int main(int argc, char* argv[])
 
   char* input;
   std::string* lineInput;
-  std::string shell_prompt("colorpp>");
+  std::string shell_prompt("StupidPainter>");
   for(;;)
     {
       input = readline(shell_prompt.c_str());
