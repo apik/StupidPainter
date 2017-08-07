@@ -150,12 +150,15 @@ public:
       for (size_t b = 0; b < c; b++)
         for (size_t a = 0; a < b; a++)
           {
-            fabcMap[std::make_tuple(a,b,c)] = fCalc(a,b,c);
+            double fabc = fCalc(a,b,c);
+
+            // We add only non-zero elements
+            if(fabc != 0) fabcMap[std::make_tuple(a,b,c)] = fabc;
 
             if((cntrf % stepf) == 0) std::cout <<" ." << std::flush;
             cntrf++;
           }
-    std::cout << " done in " << std::setw(12) << timef.elapsed() << " ms" << std::endl;
+    std::cout << " " << fabcMap.size() << "/" << nfabc << " done in " << std::setw(12) << timef.elapsed() << " ms" << std::endl;
   }
 
 
@@ -385,20 +388,41 @@ public:
     if((a == b) || (b == c) || (c == a))
       return 0;
 
+    std::map<std::tuple<size_t,size_t,size_t>, double>::const_iterator fabcit;
+    int permSign = 1;
+    
     if((a < b) && (b < c))
-      return fabcMap[std::make_tuple(a,b,c)];
-    if((a < c) && (c < b))
-      return -fabcMap[std::make_tuple(a,c,b)];
-    if((b < a) && (a < c))
-      return -fabcMap[std::make_tuple(b,a,c)];
-    if((b < c) && (c < a))
-      return fabcMap[std::make_tuple(b,c,a)];
-    if((c < a) && (a < b))
-      return fabcMap[std::make_tuple(c,a,b)];
-    if((c < b) && (b < a))
-      return -fabcMap[std::make_tuple(c,b,a)];
-
-    throw std::runtime_error("Not found f^abc value");
+      {
+        fabcit = fabcMap.find(std::make_tuple(a,b,c));
+        return  (fabcit != fabcMap.end()) ? fabcit->second : 0; 
+      }
+    else if((a < c) && (c < b))
+      {
+        fabcit = fabcMap.find(std::make_tuple(a,c,b));
+        return  (fabcit != fabcMap.end()) ? -fabcit->second : 0; 
+      }
+    else if((b < a) && (a < c))
+      {
+        fabcit = fabcMap.find(std::make_tuple(b,a,c));
+        return  (fabcit != fabcMap.end()) ? -fabcit->second : 0; 
+      }
+    else if((b < c) && (c < a))
+      {
+        fabcit = fabcMap.find(std::make_tuple(b,c,a));
+        return  (fabcit != fabcMap.end()) ? fabcit->second : 0; 
+      }
+    else if((c < a) && (a < b))
+      {
+        fabcit = fabcMap.find(std::make_tuple(c,a,b));
+        return  (fabcit != fabcMap.end()) ? fabcit->second : 0; 
+      }
+    else if((c < b) && (b < a))
+      {
+        fabcit = fabcMap.find(std::make_tuple(c,b,a));
+        return  (fabcit != fabcMap.end()) ? - fabcit->second : 0; 
+      }
+    else
+      throw std::runtime_error("Not found f^abc value");
   }
 
   double fCalc(size_t a, size_t b, size_t c)
