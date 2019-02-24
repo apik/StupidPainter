@@ -105,7 +105,8 @@ public:
           m(j,k) += 1;
           m(k,j) += 1;
 
-          vgelm.push_back(m);
+          // vGelm = T
+          vgelm.push_back(m/2.);
           cntrT++;
           if((cntrT % stepT) == 0) std::cout <<" ." << std::flush;
         }
@@ -118,7 +119,8 @@ public:
           m(j,k) -= std::complex<double>(0,1);
           m(k,j) += std::complex<double>(0,1);
 
-          vgelm.push_back(m);
+          // vGelm = T
+          vgelm.push_back(m/2.);
           cntrT++;
           if((cntrT % stepT) == 0) std::cout <<" ." << std::flush;
         }
@@ -134,7 +136,8 @@ public:
 
         m(l,l) -= coef * l;
 
-        vgelm.push_back(m);
+        // vGelm = T
+        vgelm.push_back(m/2.);
         cntrT++;
         if((cntrT % stepT) == 0) std::cout <<" ." << std::flush;
       }
@@ -372,11 +375,11 @@ public:
     return na;
   }
 
-  MatrixXcd t(size_t a)
+  const MatrixXcd& t(size_t a) const
   {
     if(a >= na)                 // numbering starts from 0
       throw std::runtime_error("Adjoint index to big");
-    return vgelm[a]/2.;
+    return vgelm[a];
   }
 
   double f(size_t a, size_t b, size_t c)
@@ -435,12 +438,12 @@ public:
     return m.trace();
   }
 
-  std::complex<double> trMap(AdjVec av)
+  std::complex<double> trMap(const AdjVec& av)
   {
-    AdjVec avMaped;
-    for (AdjVec::iterator it = av.begin(); it != av.end(); ++it)
-        avMaped.push_back(amap[*it]);
-    return tr(avMaped);
+    MatrixXcd m = MatrixXcd::Identity(nc, nc);
+    for (AdjVec::const_iterator it = av.begin(); it != av.end(); ++it)
+      m *= t(amap[*it]);
+    return m.trace();
   }
 };
 
