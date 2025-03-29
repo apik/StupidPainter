@@ -473,7 +473,7 @@ int main(int argc, char* argv[])
 
       int Nc(atoi(argv[1]));
 
-      if(Nc <= 2)
+      if(Nc < 2)
         throw std::logic_error("Allowed N>=2 only for SU(N)");
 
       Color col(Nc);
@@ -495,26 +495,31 @@ int main(int argc, char* argv[])
           // Add non empty input to the history
           if(!lineInput->empty())
             add_history(input);
-
-          if(col.parse(*lineInput))
+          try
             {
-              Timer t1;
-              std::complex<double> res = col.contract();
-              std::stringstream resStr;
-              if ( res.imag() == 0 )
-                resStr << res.real();
-              else if( res.real() == 0 )
-                resStr << "I*" << res.imag();
-              else
-                resStr << res.real() << " + I*" << res.imag();
-
-              std::cout << std::setfill ('=') << std::setw (80) << "" << std::endl;
-              std::cout << std::setfill (' ');
-              std::cout << "result:" << std::setw(33) << resStr.str()
-                        << "  Time:"  << std::setw(30) << t1.elapsed() << " ms"
-                        << std::endl << std::endl;
+              if(col.parse(*lineInput))
+                {
+                  Timer t1;
+                  std::complex<double> res = col.contract();
+                  std::stringstream resStr;
+                  if ( res.imag() == 0 )
+                    resStr << res.real();
+                  else if( res.real() == 0 )
+                    resStr << "I*" << res.imag();
+                  else
+                    resStr << res.real() << " + I*" << res.imag();
+                  
+                  std::cout << std::setfill ('=') << std::setw (80) << "" << std::endl;
+                  std::cout << std::setfill (' ');
+                  std::cout << "result:" << std::setw(33) << resStr.str()
+                            << "  Time:"  << std::setw(30) << t1.elapsed() << " ms"
+                            << std::endl << std::endl;
+                }
+            }  catch (std::exception &p) 
+            {
+              std::cerr << p.what() << std::endl;
             }
-
+          
           delete(lineInput);
           free(input);
 
