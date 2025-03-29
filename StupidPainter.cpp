@@ -65,32 +65,33 @@ public:
 };
 
 
+
+// By default we try 10 iterations with difference less than 10^-9
 bool float2rat(long double x, long int& num, long int& den,
                size_t maxit = 10, long double eps = 1e-9)
 {
-  std::vector<long int> p(maxit, 0);
-  std::vector<long int> q(maxit, 0);
-  std::vector<long int> a(maxit, 0);
-  long int len;
-  int i;
+  //Previous iterations
   //The first two convergents are 0/1 and 1/0
-  p[0] = 0; q[0] = 1;
-  p[1] = 1; q[1] = 0;
+  long int pm2 = 0, pm1 = 0;
+  long int qm2 = 0, qm1 = 1;
+  num = 1;
+  den = 0;
+  long int a;
   //The rest of the convergents (and continued fraction)
   for(size_t i=2; i < maxit; ++i)
     {
-      a[i] = lrint(floor(x));
-      p[i] = a[i]*p[i-1] + p[i-2];
-      q[i] = a[i]*q[i-1] + q[i-2];
-      // std::cout << a[i] << ":   " << p[i] << "/" << q[i] << std::endl;
-      len = i;
-      if(fabs(x-a[i]) < eps)
-        {
-          num = p[i];
-          den = q[i];
-          return true;
-        }
-      x = 1.0/(x - a[i]);
+      a = lrint(floor(x));
+      // shift values
+      pm2 = pm1;
+      pm1 = num;
+      qm2 = qm1;
+      qm1 = den;
+      // update new values
+      num = a*pm1 + pm2;
+      den = a*qm1 + qm2;
+      // std::cout << a << ":   " << num << "/" << den << std::endl;
+      if(fabs(x-a) < eps) return true;
+      x = 1.0/(x - a);
     }
   return false;
 }
