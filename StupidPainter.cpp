@@ -23,6 +23,9 @@
 // GNU readline for prompt editing
 #include <readline/readline.h>
 #include <readline/history.h>
+// color prompt
+#define KNRM  "\001\x1B[0m\002"
+#define KRED  "\001\x1B[31m\002"
 
 using Eigen::MatrixXcd;
 
@@ -60,6 +63,37 @@ public:
     return (std::clock() - start) / (double)(CLOCKS_PER_SEC / 1000);
   }
 };
+
+
+bool float2rat(long double x, long int& num, long int& den,
+               size_t maxit = 10, long double eps = 1e-9)
+{
+  std::vector<long int> p(maxit, 0);
+  std::vector<long int> q(maxit, 0);
+  std::vector<long int> a(maxit, 0);
+  long int len;
+  int i;
+  //The first two convergents are 0/1 and 1/0
+  p[0] = 0; q[0] = 1;
+  p[1] = 1; q[1] = 0;
+  //The rest of the convergents (and continued fraction)
+  for(size_t i=2; i < maxit; ++i)
+    {
+      a[i] = lrint(floor(x));
+      p[i] = a[i]*p[i-1] + p[i-2];
+      q[i] = a[i]*q[i-1] + q[i-2];
+      // std::cout << a[i] << ":   " << p[i] << "/" << q[i] << std::endl;
+      len = i;
+      if(fabs(x-a[i]) < eps)
+        {
+          num = p[i];
+          den = q[i];
+          return true;
+        }
+      x = 1.0/(x - a[i]);
+    }
+  return false;
+}
 
 typedef std::list<size_t> AdjVec;
 typedef std::vector<size_t> abc;
@@ -483,7 +517,7 @@ int main(int argc, char* argv[])
       std::string shell_prompt("StupidPainter>");
       for(;;)
         {
-          input = readline(shell_prompt.c_str());
+          input = readline(KRED "StupidPainter>" KNRM);
           // Exit if received EOLN or readline return
           // zero pointer
           if (input == 0)
@@ -513,7 +547,34 @@ int main(int argc, char* argv[])
                   std::cout << std::setfill (' ');
                   std::cout << "result:" << std::setw(33) << resStr.str()
                             << "  Time:"  << std::setw(30) << t1.elapsed() << " ms"
-                            << std::endl << std::endl;
+                            << std::endl;
+
+                  // Clear sstream
+                  std::stringstream().swap(resStr); 
+                  // Try to rationalize result
+                  long int reNum,reDen,imNum,imDen;
+                  if(float2rat(res.real(), reNum, reDen) && float2rat(res.imag(), imNum, imDen))
+                    {
+                      if ( res.imag() == 0 )
+                        {
+                          resStr << reNum;
+                          if (reDen != 1) resStr << "/" << reDen;
+                        }
+                      else if( res.real() == 0 )
+                        {
+                          resStr << "I*" << imNum;
+                          if (imDen != 1) resStr << "/" << imDen;
+                        }
+                      else
+                        {
+                          resStr << reNum;
+                          if (reDen != 1) resStr << "/" << reDen;
+                          resStr << "I*" << imNum;
+                          if (imDen != 1) resStr << "/" << imDen;
+                        }
+                      std::cout << "rationalized:" << std::setw(27) << resStr.str() << std::endl;
+                    }
+                  std::cout << std::endl;
                 }
             }  catch (std::exception &p) 
             {
